@@ -13,5 +13,9 @@ librosa: audio utility that includes beat detection, time stretching, and a bunc
 ## main.py
 Given a filename, this routes input from a file to the default output. The file input simulates an input stream which is very useful.
 
-## test.py
-Original example code from python-sounddevice library
+## btrack_test.py
+This adds beat tracking to main.py. 'Beat' is printed to the screen every time a beat is detected from the input
+
+IMPORTANT: This uses the BTrack Library Python Wrapper from my Python-BTrack library. 
+The compiled binary from building the python wrapper should be placed into the lib/ folder
+in order to run this file!

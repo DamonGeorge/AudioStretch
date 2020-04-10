@@ -14,14 +14,12 @@ import soundfile as sf
 import numpy as np
 import time
 import asyncio
+import utils
+from typing import Callable
 
 
-# input
-
-
-# output
 class Input(object):
-    def __init__(self, input_buffer: np.ndarray, filename=None, device=None, block_size=512, sample_rate=44100):
+    def __init__(self, input_buffer: np.ndarray, filename=None, device=None, block_size=512, sample_rate=44100, callback: Callable = utils.empty_func):
         self.buffer = input_buffer
         self.buf_size = np.shape(self.buffer)[0]
         self.block_size = block_size
@@ -29,6 +27,7 @@ class Input(object):
         self.in_idx = 0
         self.start_event = asyncio.Event()
         self.event_loop = asyncio.get_event_loop()
+        self.callback = callback
 
         self._stop = False
 
@@ -63,43 +62,47 @@ class Input(object):
             self.stream.abort()
 
     def _handle_new_block(self, block, num_frames):
+        self.callback(block)
+
+        # handle wrap around of the buffer
         if self.in_idx + num_frames >= self.buf_size:
             frames_left = self.buf_size - self.in_idx
             extra_frames = num_frames - frames_left
             self.buffer[self.in_idx:] = block[:frames_left]
             self.buffer[:extra_frames] = block[frames_left:]
             self.in_idx = extra_frames
-            # print(f"Filled Input buffer!   in_idx = {self.in_idx}")
 
         else:
             self.buffer[self.in_idx: self.in_idx + num_frames] = block
             self.in_idx += num_frames
 
-            if not self.start_event.is_set():
+            # Signal start event after two blocks
+            if not self.start_event.is_set() and self.in_idx > self.block_size*2:
                 self.event_loop.call_soon_threadsafe(self.start_event.set)
-                # self.start_event.set()
-                print("Start event!")
 
     async def _stream_file(self):
+        """Imitates real time audio stream but from file"""
         time_per_loop = (self.block_size / self.sample_rate)
         extra_time_slept = 0
         while not self._stop:
             start = time.perf_counter()
 
+            # process the audio
             block = self.file.read(frames=self.block_size)
             num_frames = np.shape(block)[0]
             self._handle_new_block(block, num_frames)
 
+            # compute processing time
             end_compute = time.perf_counter()
             elapsed_compute = end_compute - start
 
+            # sleep for remaining time at given sample rate
             sleep_time = time_per_loop - elapsed_compute - extra_time_slept
             await asyncio.sleep(sleep_time)
 
+            # record any excess time spent sleeping to remove in the next loop
             end_sleep = time.perf_counter()
             elapsed_sleep = end_sleep - end_compute
-            # print(f"elapsed total: {end_sleep - start}")
-
             extra_time_slept = elapsed_sleep - sleep_time
 
     def _stream_callback(self, indata: np.ndarray, num_frames: int,
