@@ -35,6 +35,7 @@ class Input(object):
         if filename:
             self.from_file = True
             self.file = sf.SoundFile(filename)
+            self.sample_rate = self.file.samplerate
         else:
             self.from_file = False
             self.stream = sd.InputStream(callback=self._stream_callback,

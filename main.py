@@ -14,47 +14,42 @@ from input import Input
 from output import Output
 
 
-def int_or_str(text):
-    """Helper function for argument parsing."""
-    try:
-        return int(text)
-    except ValueError:
-        return text
+def parse_args():
+    """
+    Parses command line arguments.
+    Args: file, device
+    """
+    # Helper function for argument parsing.
+    def int_or_str(text):
+        try:
+            return int(text)
+        except ValueError:
+            return text
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--file", help="audio file to be streamed as input")
+    parser.add_argument("-d", "--device", type=int_or_str, help="output device")
+    parser.add_argument("-b", "--block-size", type=int, default=1024, help="audio block size in frames")
 
-# Parse the command line args
-parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument(
-    '-l', '--list-devices', action='store_true',
-    help='show list of audio devices and exit')
-args, remaining = parser.parse_known_args()
-if args.list_devices:
-    print(sd.query_devices())
-    parser.exit(0)
-parser = argparse.ArgumentParser(
-    description=__doc__,
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-    parents=[parser])
-parser.add_argument(
-    'filename', metavar='FILENAME',
-    help='audio file to be played back')
-parser.add_argument(
-    '-d', '--device', type=int_or_str,
-    help='output device (numeric ID or substring)')
-args = parser.parse_args(remaining)
+    return parser.parse_args()
 
 
 async def main():
-    sample_rate = 44100  # sd.default.samplerate
-    block_size = 1024
+    args = parse_args()
+
+    filename = args.file
+    output_device = args.device
+    block_size = args.block_size
     out_idx = 0
     in_idx = 0
     buf_size = 10240
     data = np.zeros((buf_size, 2))
 
-    print(f"Default sample rate: {sample_rate}")
-    input = Input(data, filename=args.filename, block_size=block_size)
-    output = Output(data, block_size=block_size)
+    input = Input(data, filename=filename, block_size=block_size)
+    sample_rate = input.sample_rate  # default sample rate
+
+    print(f"Sample rate: {sample_rate}")
+    output = Output(data, block_size=block_size, sample_rate=sample_rate)
     try:
         print(f"Input Starting: {time.perf_counter()}")
         await input.start()
