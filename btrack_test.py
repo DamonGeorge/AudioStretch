@@ -1,6 +1,7 @@
 
 """
-This program 
+This program detects beats in real time from the input source 
+(either a file or input device)
 """
 import argparse
 

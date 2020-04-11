@@ -1,14 +1,4 @@
 
-"""Load an audio file into memory and play its contents.
-
-NumPy and the soundfile module (https://PySoundFile.readthedocs.io/)
-must be installed for this to work.
-
-This example program loads the whole file into memory before starting
-playback.
-To play very long files, you should use play_long_file.py instead.
-
-"""
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -19,19 +9,31 @@ import librosa
 
 
 # output
-class Loop(object):
-    def __init__(self, path="/Users/damongeorge/Music/Canteloupe Island.wav", estimated_bpm=120.0, hop_length=512, block_size=1024):
-        file = sf.SoundFile(path)
+class AudioLoop(object):
+    def __init__(self, path="drummer_120.wav", estimated_bpm=120.0, hop_length=512, block_size=1024, align_beats_to_start=True):
+        self.audio, self.sample_rate = sf.read(str(path), dtype="float32")
 
-        self.audio, self.sample_rate = file.read(dtype="float32")
-
-        mono = librosa.to_mono(self.audio)
-
-        self.tempo, self.beats = librosa.beat.beat_track(mono.T, sr=self.sample_rate,
-                                                         hop_length=hop_length, start_bpm=estimated_bpm, units='samples')
-        self.block_size = 1024
+        self.block_size = block_size
+        self.hop_length = hop_length
         self.samples = self.audio.shape[0]
         self.channels = self.audio.shape[1]
+
+        self.tempo, self.beat_frames = librosa.beat.beat_track(librosa.to_mono(self.audio.T), sr=self.sample_rate,
+                                                               hop_length=self.hop_length, start_bpm=estimated_bpm, units='frames', trim=False)
+
+        self.num_frames_adjusted = 0
+        if align_beats_to_start:
+            self.num_frames_adjusted = self.beat_frames[0]
+            if self.num_frames_adjusted > 0:
+                print(f"Adjusted detected beats by {self.num_frames_adjusted * self.hop_length} samples")
+
+                if (self.num_frames_adjusted * self.hop_length / self.sample_rate) > 0.05:
+                    print("Warning: aligning beats to the loop start adjusted beats by more than 50 ms!")
+
+                self.beat_frames = self.beat_frames - self.num_frames_adjusted
+
+        self.beat_samples = self.beat_frames * hop_length
+
         self.cur_idx = 0
 
     def get_next_block(self, buffer: np.ndarray, num_frames: int):
