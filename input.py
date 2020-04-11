@@ -13,9 +13,9 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import time
-import asyncio
 import utils
 from typing import Callable
+from threading import Thread, Event
 
 
 class Input(object):
@@ -25,8 +25,7 @@ class Input(object):
         self.block_size = block_size
         self.sample_rate = sample_rate
         self.in_idx = 0
-        self.start_event = asyncio.Event()
-        self.event_loop = asyncio.get_event_loop()
+        self.start_event = Event()
         self.callback = callback
 
         self._stop = False
@@ -35,19 +34,20 @@ class Input(object):
             self.from_file = True
             self.file = sf.SoundFile(filename)
             self.sample_rate = self.file.samplerate
+            self.thread = Thread(target=self._stream_file)
         else:
             self.from_file = False
             self.stream = sd.InputStream(callback=self._stream_callback,
                                          samplerate=self.sample_rate, blocksize=self.block_size, device=device)
 
-    async def start(self):
+    def start(self):
         if self.from_file:
-            asyncio.create_task(self._stream_file())
+            self.thread.start()
         else:
             self.stream.start()
 
         print("WAITING")
-        await self.start_event.wait()
+        self.start_event.wait()
 
     def stop(self):
         if self.from_file:
@@ -78,10 +78,10 @@ class Input(object):
 
             # Signal start event after two blocks
             if not self.start_event.is_set() and self.in_idx > self.block_size*2:
-                self.event_loop.call_soon_threadsafe(self.start_event.set)
+                self.start_event.set()
 
-    async def _stream_file(self):
-        """Imitates real time audio stream but from file"""
+    def _stream_file(self):
+        """THREAD: Imitates real time audio stream but from file"""
         time_per_loop = (self.block_size / self.sample_rate)
         extra_time_slept = 0
         while not self._stop:
@@ -98,7 +98,7 @@ class Input(object):
 
             # sleep for remaining time at given sample rate
             sleep_time = time_per_loop - elapsed_compute - extra_time_slept
-            await asyncio.sleep(sleep_time)
+            time.sleep(sleep_time)
 
             # record any excess time spent sleeping to remove in the next loop
             end_sleep = time.perf_counter()

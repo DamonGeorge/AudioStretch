@@ -10,7 +10,6 @@ import soundfile as sf
 import numpy as np
 import time
 import librosa
-import asyncio
 from input import Input
 from output import Output
 
@@ -35,7 +34,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def main():
+def main():
     args = parse_args()
 
     filename = args.file
@@ -53,12 +52,12 @@ async def main():
     output = Output(data, block_size=block_size, sample_rate=sample_rate)
     try:
         print(f"Input Starting: {time.perf_counter()}")
-        await input.start()
+        input.start()
         print(f"Output Starting: {time.perf_counter()}")
         output.start()
 
         while True:
-            await asyncio.sleep(1)
+            time.sleep(1)
 
     except KeyboardInterrupt:
         print('\nInterrupted by user')
@@ -72,4 +71,5 @@ async def main():
 
 
 # run main in the event loop
-asyncio.run(main())
+if __name__ == "__main__":
+    main()
