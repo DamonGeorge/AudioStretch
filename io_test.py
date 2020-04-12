@@ -12,6 +12,7 @@ import time
 import librosa
 from input import Input
 from output import Output
+from circular_buffer import CircularBuffer
 
 
 def parse_args():
@@ -40,16 +41,14 @@ def main():
     filename = args.file
     output_device = args.device
     block_size = args.block_size
-    out_idx = 0
-    in_idx = 0
     buf_size = 10240
-    data = np.zeros((buf_size, 2))
+    buffer = CircularBuffer((buf_size, 2))
 
-    input = Input(data, filename=filename, block_size=block_size)
+    input = Input(filename=filename, block_size=block_size, input_buffer=buffer)
     sample_rate = input.sample_rate  # default sample rate
 
     print(f"Sample rate: {sample_rate}")
-    output = Output(data, block_size=block_size, sample_rate=sample_rate)
+    output = Output(buffer, block_size=block_size, sample_rate=sample_rate)
     try:
         print(f"Input Starting: {time.perf_counter()}")
         input.start()

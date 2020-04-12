@@ -13,16 +13,16 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import time
-
+from circular_buffer import CircularBuffer
 
 # input
 
 
 # output
 class Output(object):
-    def __init__(self, output_buffer: np.ndarray, device=None, block_size=512, sample_rate=44100):
+    def __init__(self, output_buffer: CircularBuffer, device=None, block_size=512, sample_rate=44100):
         self.buffer = output_buffer
-        self.buf_size = np.shape(self.buffer)[0]
+        self.buf_idx = 0
         self.block_size = block_size
         self.sample_rate = sample_rate
         self.out_idx = 0
@@ -41,13 +41,4 @@ class Output(object):
 
     def _stream_callback(self, outdata: np.ndarray, num_frames: int,
                          time, status: sd.CallbackFlags) -> None:
-        if self.out_idx + num_frames >= self.buf_size:
-            frames_left = self.buf_size - self.out_idx
-            extra_frames = num_frames - frames_left
-            outdata[:frames_left] = self.buffer[self.out_idx:]
-            outdata[frames_left:] = self.buffer[:extra_frames]
-            self.out_idx = extra_frames
-            # print(f"Cleared output buffer!   out_idx={self.out_idx}")
-        else:
-            outdata[:] = self.buffer[self.out_idx: self.out_idx + num_frames]
-            self.out_idx += num_frames
+        self.buf_idx = self.buffer.get_into(self.buf_idx, outdata, num_frames)

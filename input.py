@@ -14,28 +14,32 @@ import soundfile as sf
 import numpy as np
 import time
 import utils
-from typing import Callable
+from typing import Callable, Optional
 from threading import Thread, Event
+from circular_buffer import CircularBuffer
 
 
 class Input(object):
-    def __init__(self, input_buffer: np.ndarray, filename=None, device=None, block_size=512, sample_rate=44100, callback: Callable = utils.empty_func):
+    def __init__(self, filename=None, device=None, block_size=512, sample_rate=44100, input_buffer: Optional[CircularBuffer] = None, callback: Callable = utils.empty_func):
         self.buffer = input_buffer
-        self.buf_size = np.shape(self.buffer)[0]
+        self.buf_idx = 0
         self.block_size = block_size
         self.sample_rate = sample_rate
         self.in_idx = 0
         self.start_event = Event()
         self.callback = callback
 
+        self.blocks_received = 0
         self._stop = False
 
         if filename:
+            print("using filename")
             self.from_file = True
             self.file = sf.SoundFile(filename)
             self.sample_rate = self.file.samplerate
             self.thread = Thread(target=self._stream_file)
         else:
+            print("using input device")
             self.from_file = False
             self.stream = sd.InputStream(callback=self._stream_callback,
                                          samplerate=self.sample_rate, blocksize=self.block_size, device=device)
@@ -64,21 +68,12 @@ class Input(object):
     def _handle_new_block(self, block, num_frames):
         self.callback(block)
 
-        # handle wrap around of the buffer
-        if self.in_idx + num_frames >= self.buf_size:
-            frames_left = self.buf_size - self.in_idx
-            extra_frames = num_frames - frames_left
-            self.buffer[self.in_idx:] = block[:frames_left]
-            self.buffer[:extra_frames] = block[frames_left:]
-            self.in_idx = extra_frames
+        if self.buffer is not None:
+            self.buf_idx = self.buffer.put(self.buf_idx, block, num_frames)
 
-        else:
-            self.buffer[self.in_idx: self.in_idx + num_frames] = block
-            self.in_idx += num_frames
-
-            # Signal start event after two blocks
-            if not self.start_event.is_set() and self.in_idx > self.block_size*2:
-                self.start_event.set()
+        self.blocks_received += 1
+        if self.blocks_received == 2:
+            self.start_event.set()
 
     def _stream_file(self):
         """THREAD: Imitates real time audio stream but from file"""

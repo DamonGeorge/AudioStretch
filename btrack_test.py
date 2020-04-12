@@ -10,10 +10,10 @@ import soundfile as sf
 import numpy as np
 import time
 import librosa
-import asyncio
 from input import Input
 from output import Output
 from lib.btrack import BeatTracker  # pylint: disable=import-error,no-name-in-module
+from circular_buffer import CircularBuffer
 
 
 def parse_args():
@@ -52,29 +52,30 @@ def create_btrack_callback(btrack: BeatTracker):
     return callback
 
 
-async def main():
+def main():
     args = parse_args()
 
     filename = args.file
     output_device = args.device
     block_size = args.block_size
     buf_size = 10240
-    data = np.zeros((buf_size, 2))
+    buffer = CircularBuffer((buf_size, 2))
     btrack = BeatTracker(hop_size=512, frame_size=block_size)
 
-    input = Input(data, filename=filename, block_size=block_size, callback=create_btrack_callback(btrack))
+    input = Input(input_buffer=buffer, filename=filename, block_size=block_size,
+                  callback=create_btrack_callback(btrack))
     sample_rate = input.sample_rate  # default sample rate
 
     print(f"Sample rate: {sample_rate}")
-    output = Output(data, block_size=block_size, sample_rate=sample_rate)
+    output = Output(buffer, block_size=block_size, sample_rate=sample_rate)
     try:
         print(f"Input Starting: {time.perf_counter()}")
-        await input.start()
+        input.start()
         print(f"Output Starting: {time.perf_counter()}")
         output.start()
 
         while True:
-            await asyncio.sleep(1)
+            time.sleep(1)
 
     except KeyboardInterrupt:
         print('\nInterrupted by user')
@@ -87,5 +88,5 @@ async def main():
         input.stop()
 
 
-# run main in the event loop
-asyncio.run(main())
+if __name__ == "__main__":
+    main()
