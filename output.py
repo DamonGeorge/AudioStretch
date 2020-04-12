@@ -26,6 +26,7 @@ class Output(object):
         self.block_size = block_size
         self.sample_rate = sample_rate
         self.out_idx = 0
+        self.processed_samples = 0
 
         self.stream = sd.OutputStream(callback=self._stream_callback, blocksize=self.block_size,
                                       samplerate=self.sample_rate, device=device)
@@ -42,3 +43,4 @@ class Output(object):
     def _stream_callback(self, outdata: np.ndarray, num_frames: int,
                          time, status: sd.CallbackFlags) -> None:
         self.buf_idx = self.buffer.get_into(self.buf_idx, outdata, num_frames)
+        self.processed_samples += num_frames

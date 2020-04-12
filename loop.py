@@ -4,6 +4,7 @@ import soundfile as sf
 import numpy as np
 import time
 import librosa
+from circular_buffer import CircularBuffer
 
 # input
 
@@ -12,6 +13,10 @@ import librosa
 class AudioLoop(object):
     def __init__(self, path="drummer_120.wav", estimated_bpm=120.0, hop_length=512, block_size=1024, align_beats_to_start=True):
         self.audio, self.sample_rate = sf.read(str(path), dtype="float32")
+
+        self.buffer = CircularBuffer(buffer=self.audio)
+        self.buffer.put(0, self.audio)
+        self.buf_idx = 0
 
         self.block_size = block_size
         self.hop_length = hop_length
@@ -36,15 +41,16 @@ class AudioLoop(object):
 
         self.cur_idx = 0
 
-    def get_next_block(self, buffer: np.ndarray, num_frames: int):
-        next_idx = self.cur_idx + num_frames
+    def get_block(self, idx, num_frames) -> np.ndarray:
+        i, output = self.buffer.get(idx, num_frames)
+        return output
 
-        if next_idx >= self.samples:
-            frames_left = self.samples - self.cur_idx
-            extra_frames = num_frames - frames_left
-            buffer[:frames_left] = self.audio[self.cur_idx:]
-            buffer[frames_left:] = self.audio[:extra_frames]
-            self.cur_idx = extra_frames
-        else:
-            buffer[:] = self.audio[self.cur_idx: next_idx]
-            self.out_idx = next_idx
+    def get_block_into(self, idx, num_frames, buffer: np.ndarray):
+        self.buffer.get_into(idx, buffer, num_frames)
+
+    def get_next_block(self, num_frames: int) -> np.ndarray:
+        self.buf_idx, output = self.buffer.get(self.buf_idx, num_frames)
+        return output
+
+    def get_next_block_into(self, num_frames: int, buffer: np.ndarray):
+        self.buf_idx = self.buffer.get_into(self.buf_idx, buffer, num_frames)

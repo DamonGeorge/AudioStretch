@@ -3,8 +3,12 @@ import numpy as np
 
 class CircularBuffer(object):
 
-    def __init__(self, shape: tuple):
-        self.buffer = np.zeros(shape)
+    def __init__(self, shape: tuple = (0, 0), buffer=None):
+        if buffer is not None:
+            self.buffer = buffer
+        else:
+            self.buffer = np.zeros(shape)
+
         self.buf_size = np.shape(self.buffer)[0]
 
     def get_next_idx(self, start_idx, length) -> int:
@@ -46,7 +50,7 @@ class CircularBuffer(object):
             return idx + length
 
     def get(self, idx, length):
-        output = np.zeros((length, *np.shape(self.buffer)[1:]))
+        output = np.zeros((length, *np.shape(self.buffer)[1:]), dtype=self.buffer.dtype)
 
         next_idx = self.get_into(idx, output)
 
