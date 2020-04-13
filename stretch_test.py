@@ -7,11 +7,10 @@ from input import Input
 from loop import AudioLoop
 from lib.btrack import BeatTracker  # pylint: disable=import-error,no-name-in-module
 import librosa
-import pickle
 import time
 from circular_buffer import CircularBuffer
 from lib.rubberband import AudioStretcher  # pylint: disable=import-error,no-name-in-module
-from threading import Thread
+from threading import Thread, Event
 
 
 def parse_args():
@@ -44,9 +43,13 @@ def main():
     out_idx = 0
     processed_samples = 0
 
-    with open(args.loop, 'rb') as f:
-        loop: AudioLoop = pickle.load(f)
-    loop_output_stream = Output(output_buffer, block_size=block_size, sample_rate=loop.sample_rate, device=args.output)
+    # loop_output_event = Event()
+    # def loop_callback(*args):
+    #     loop_output_event.set()
+
+    loop = AudioLoop.from_file(args.loop)
+    loop_output_stream = Output(output_buffer, block_size=block_size,
+                                sample_rate=loop.sample_rate, device=args.output)
 
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
 
@@ -54,7 +57,7 @@ def main():
 
     input("Press enter to start loop playback")
 
-    while processed_samples <= buf_size - 2 * block_size:
+    while processed_samples < block_size:
         # time_scale = loop.tempo / current_tempo
         stretched = stretcher.stretch(loop.get_next_block(block_size), time_scale)
         if stretched.shape[0] > 0:
@@ -64,10 +67,16 @@ def main():
 
     print("OUTPUT STARTING")
     loop_output_stream.start()
-
+    # loop_output_event.set()
     while True:
-        # time_scale = loop.tempo / current_tempo
+        # loop_output_event.wait()
+        # loop_output_event.clear()
+        while (processed_samples - loop_output_stream.processed_samples) >= block_size:
+            # print("first sleep")
+            time.sleep(0.005)
+
         start = time.perf_counter()
+        print(f"beat idx = {loop.beat_idx}")
 
         stretcher.set_time_ratio(time_scale)
         stretcher.process(loop.get_next_block(block_size), False)
@@ -78,7 +87,7 @@ def main():
             next_idx = output_buffer.get_next_idx(out_idx, np.shape(stretched)[0])
             while (processed_samples - loop_output_stream.processed_samples) >= buf_size:
                 print("sleep")
-                time.sleep(0.001)
+                time.sleep(0.005)
             out_idx = output_buffer.put(out_idx, stretched)
             stretched = stretcher.retrieve()
 

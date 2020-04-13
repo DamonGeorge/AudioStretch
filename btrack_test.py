@@ -37,8 +37,11 @@ def parse_args():
 
 
 def create_btrack_callback(btrack: BeatTracker):
+    tempo = 120
 
     def callback(block: np.ndarray):
+        nonlocal tempo
+
         if block.ndim > 1:
             if block.shape[1] > 1:
                 block = librosa.to_mono(block.T)
@@ -48,6 +51,11 @@ def create_btrack_callback(btrack: BeatTracker):
 
         if btrack.beat_due_in_current_frame():
             print("Beat")
+
+            new_tempo = btrack.get_current_tempo_estimate()
+            if new_tempo != tempo:
+                tempo = new_tempo
+                print(f"Tempo: {tempo}")
 
     return callback
 

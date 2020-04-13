@@ -10,7 +10,6 @@ import librosa
 from pathlib import Path
 from loop import AudioLoop
 import sounddevice as sd
-import pickle
 
 
 def parse_args():
@@ -43,8 +42,7 @@ def main():
 
     sd.stop()
     if val == 'y':
-        with open(f"{filepath.stem}_LOOP.pkl", 'wb') as f:
-            pickle.dump(loop, f)
+        loop.save(f"{filepath.stem}_LOOP.pkl")
         print(f"Saved to {filepath.stem}_LOOP.pkl")
 
     print("Goodbye!")
