@@ -132,6 +132,9 @@ def main():
 
     beat_event.clear()
     # loop_output_event.set()
+    samples_til_next_input_beat = np.inf
+    samples_since_time_scale_calculated = 0
+    beat_count = 3
 
     # the main processing loop
     while True:
@@ -145,39 +148,52 @@ def main():
 
         if beat_event.is_set():  # we just had beat
             beat_event.clear()
-            samples_til_next_input_beat = input_sample_rate * 60 // current_tempo
-            samples_til_next_loop_beat = loop.get_samples_til_next_beat()
-            print(f"loop beat idx = {loop.beat_idx}")
-            print(f"samples till next input beat = {samples_til_next_input_beat}")
-            print(f"samples till next loop beat = {samples_til_next_loop_beat}")
+            beat_count += 1
+            if beat_count == 4:
+                beat_count = 0
 
-            if samples_til_next_loop_beat > samples_til_next_input_beat:  # this is RARE
-                # we must compress/speed up the loop
-                time_scale = samples_til_next_input_beat / samples_til_next_loop_beat
-                print("First scale IF")
+                samples_til_next_input_beat = input_sample_rate * 60 // current_tempo
+                samples_til_next_loop_beat = loop.get_samples_til_next_beat()
+                print(f"loop beat idx = {loop.beat_idx}")
+                print(f"samples till next input beat = {samples_til_next_input_beat}")
+                print(f"samples till next loop beat = {samples_til_next_loop_beat}")
 
-            # else if loop is behind the coming beat, we need to stretch/slow the loop
-            elif samples_til_next_loop_beat > 0.5 * samples_til_next_input_beat \
-                    and (samples_til_next_input_beat - samples_til_next_loop_beat) >= block_size:
-                time_scale = samples_til_next_input_beat / samples_til_next_loop_beat
-                print("Second scale IF")
+                if samples_til_next_loop_beat > samples_til_next_input_beat:  # this is RARE
+                    # we must compress/speed up the loop
+                    time_scale = samples_til_next_input_beat / samples_til_next_loop_beat
+                    print("First scale IF")
 
-            # else if loop if slightly ahead, we need to compress/speed up the loop
-            elif samples_til_next_loop_beat < 0.5 * samples_til_next_input_beat \
-                    and samples_til_next_loop_beat >= block_size:
-                time_scale = samples_til_next_input_beat / \
-                    (samples_til_next_loop_beat + loop.get_sample_length_of_next_beat())
-                print("Third scale IF")
-            else:
-                # calc the time scale using tempos
-                time_scale = loop.tempo / current_tempo
-                print("Last scale IF")
+                # else if loop is behind the coming beat, we need to stretch/slow the loop
+                elif samples_til_next_loop_beat > 0.5 * samples_til_next_input_beat \
+                        and (samples_til_next_input_beat - samples_til_next_loop_beat) >= block_size:
+                    time_scale = samples_til_next_input_beat / samples_til_next_loop_beat
+                    print("Second scale IF")
 
-            print(f"time scale = {time_scale}")
+                # else if loop if slightly ahead, we need to compress/speed up the loop
+                elif samples_til_next_loop_beat < 0.5 * samples_til_next_input_beat \
+                        and samples_til_next_loop_beat >= block_size:
+                    time_scale = samples_til_next_input_beat / \
+                        (samples_til_next_loop_beat + loop.get_sample_length_of_next_beat())
+                    print("Third scale IF")
+                else:
+                    # calc the time scale using tempos
+                    time_scale = loop.tempo / current_tempo
+                    print("Last scale IF")
+
+                samples_since_time_scale_calculated = 0
+                print(f"time scale = {time_scale}")
+
+        elif samples_since_time_scale_calculated >= samples_til_next_input_beat:
+            time_scale = loop.tempo / current_tempo
+            print(f"resetting time_scale = {time_scale}")
+            samples_since_time_scale_calculated = 0
 
         # stretch the audio
         stretcher.set_time_ratio(time_scale)
         stretcher.process(loop.get_next_block(block_size), False)
+
+        # increment counter
+        samples_since_time_scale_calculated += block_size
 
         # retrieve stretched audio in a loop until no more audio available
         stretched = stretcher.retrieve()

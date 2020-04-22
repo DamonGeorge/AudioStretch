@@ -69,6 +69,7 @@ def main():
     buf_size = 10240
     buffer = CircularBuffer((buf_size, 2))
     btrack = BeatTracker(hop_size=512, frame_size=block_size)
+    btrack.fix_tempo(120)
 
     input = Input(input_buffer=buffer, filename=filename, block_size=block_size,
                   callback=create_btrack_callback(btrack))

@@ -1,7 +1,7 @@
 
 """
-This program routes input in real time from either the default input device or given file
-to the given output device
+This program detects beats in real time from the input source 
+(either a file or input device)
 """
 import argparse
 
@@ -12,8 +12,8 @@ import time
 import librosa
 from input import Input
 from output import Output
-from queue_buffer import QueueBuffer
-from input_file_stream import InputFileStream
+from circular_buffer import CircularBuffer
+from aubio import tempo
 
 
 def parse_args():
@@ -36,6 +36,32 @@ def parse_args():
     return parser.parse_args()
 
 
+def create_tracker_callback(beat_tracker):
+    tempo = 120
+
+    def callback(block: np.ndarray):
+        nonlocal tempo
+
+        if block.ndim > 1:
+            if block.shape[1] > 1:
+                block = librosa.to_mono(block.T)
+            else:
+                block = np.squeeze(block)
+
+        is_beat = False
+        for i in range(2):
+            bt = beat_tracker(block[i*512:(i+1)*512])
+            is_beat = is_beat or bt
+        new_tempo = beat_tracker.get_bpm()
+        if new_tempo != tempo:
+            tempo = new_tempo
+            print(f"Tempo: {tempo}")
+        if is_beat:
+            print("Beat")
+
+    return callback
+
+
 def main():
     args = parse_args()
 
@@ -43,21 +69,19 @@ def main():
     output_device = args.device
     block_size = args.block_size
     buf_size = 10240
-    buffer = QueueBuffer((buf_size, 2))
+    buffer = CircularBuffer((buf_size, 2))
+    if filename:
+        input_sample_rate = sf.SoundFile(filename).samplerate
+    else:
+        input_sample_rate = 44100
 
-    def input_callback(indata, frames, *args, **kwargs):
-        buffer.put(indata, frames)
+    beat_tracker = tempo(buf_size=1024, samplerate=input_sample_rate)
 
-    def output_callback(outdata, frames, *args, **kwargs):
-        if not buffer.get_into_nowait(outdata, length=frames):
-            outdata[:] = 0
+    input = Input(input_buffer=buffer, filename=filename, block_size=block_size,
+                  callback=create_tracker_callback(beat_tracker))
 
-    input = InputFileStream(filename=filename, block_size=block_size, callback=input_callback)
-    sample_rate = input.sample_rate  # default sample rate
-    print(f"Sample rate: {sample_rate}")
-
-    output = sd.OutputStream(blocksize=block_size, samplerate=sample_rate,
-                             device=output_device, callback=output_callback)
+    print(f"Sample rate: {input_sample_rate}")
+    output = Output(buffer, block_size=block_size, sample_rate=input_sample_rate)
     try:
         print(f"Input Starting: {time.perf_counter()}")
         input.start()
@@ -78,6 +102,5 @@ def main():
         input.stop()
 
 
-# run main in the event loop
 if __name__ == "__main__":
     main()

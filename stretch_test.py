@@ -54,16 +54,21 @@ def main():
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
 
     time_scale = 1.1
+    stretcher.set_time_ratio(time_scale)
 
     input("Press enter to start loop playback")
 
     while processed_samples < block_size:
-        # time_scale = loop.tempo / current_tempo
-        stretched = stretcher.stretch(loop.get_next_block(block_size), time_scale)
-        if stretched.shape[0] > 0:
+        # stretch the audio
+        stretcher.process(loop.get_next_block(block_size), False)
+
+        # retrieve stretched audio in a loop until no more audio available
+        stretched = stretcher.retrieve()
+        while stretched.shape[0] > 0:
             out_idx = output_buffer.put(out_idx, stretched)
             processed_samples += np.shape(stretched)[0]
-            print(f"stretched samples: {processed_samples}")
+
+            stretched = stretcher.retrieve()
 
     print("OUTPUT STARTING")
     loop_output_stream.start()
