@@ -24,6 +24,8 @@ class AudioLoop(object):
             self.block_size = block_size
             self.hop_length = hop_length
             self.samples = self.audio.shape[0]
+            if len(self.audio.shape) == 1:
+                self.audio = np.expand_dims(self.audio, axis=1)
             self.channels = self.audio.shape[1]
 
             self.tempo, self.beat_frames = librosa.beat.beat_track(librosa.to_mono(self.audio.T), sr=self.sample_rate,
