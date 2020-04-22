@@ -12,12 +12,16 @@ class QueueBuffer(object):
 
     def __init__(self, shape: tuple = (0, 0), buffer=None):
         self.buffer = CircularBuffer(shape, buffer=buffer)
-        assert self.buffer.buf_size % 2 == 0, "buffer size must be divisible by 2"
+        assert self.capacity % 2 == 0, "buffer size must be divisible by 2"
 
         self.read_idx = 0
         self.write_idx = 0
         self.read_event = Event()
         self.write_event = Event()
+
+    @property
+    def capacity(self):
+        return self.buffer.buf_size
 
     def empty(self):
         return self.read_idx == self.write_idx
@@ -26,18 +30,18 @@ class QueueBuffer(object):
         return self.write_idx - self.read_idx
 
     def full(self):
-        return self.size() == self.buffer.buf_size
+        return self.size() == self.capacity
 
     def put(self, data: np.ndarray, length=None) -> int:
         if length is None:
             length = np.shape(data)[0]
 
         self.read_event.clear()
-        while self.write_idx + length - self.read_idx > self.buffer.buf_size:  # we must wait
+        while self.write_idx + length - self.read_idx > self.capacity:  # we must wait
             self.read_event.wait()
             self.read_event.clear()
 
-        self.buffer.put(self.write_idx % self.buffer.buf_size, data, length=length)
+        self.buffer.put(self.write_idx % self.capacity, data, length=length)
         self.write_idx += length
         self.write_event.set()
         return True
@@ -46,10 +50,10 @@ class QueueBuffer(object):
         if length is None:
             length = np.shape(data)[0]
 
-        if self.write_idx + length - self.read_idx > self.buffer.buf_size:
+        if self.write_idx + length - self.read_idx > self.capacity:
             return False
         else:
-            self.buffer.put(self.write_idx % self.buffer.buf_size, data, length=length)
+            self.buffer.put(self.write_idx % self.capacity, data, length=length)
             self.write_idx += length
             self.write_event.set()
             return True
@@ -59,10 +63,10 @@ class QueueBuffer(object):
     #         length = np.shape(data)[0]
 
     #     # put no matter what
-    #     self.buffer.put(self.write_idx % self.buffer.buf_size, data, length=length)
+    #     self.buffer.put(self.write_idx % self.capacity, data, length=length)
     #     self.write_idx += length
 
-    #     if self.write_idx - self.read_idx > self.buffer.buf_size:  # bump up read idx
+    #     if self.write_idx - self.read_idx > self.capacity:  # bump up read idx
     #         self.read_idx += length
 
     #     self.write_event.set()
@@ -77,7 +81,7 @@ class QueueBuffer(object):
             self.read_event.wait()
             self.read_event.clear()
 
-        self.buffer.get_into(self.read_idx % self.buffer.buf_size, output, length=length)
+        self.buffer.get_into(self.read_idx % self.capacity, output, length=length)
         self.read_idx += length
         self.read_event.set()
         return True
@@ -89,7 +93,7 @@ class QueueBuffer(object):
         if self.read_idx + length > self.write_idx:
             return False
         else:
-            self.buffer.get_into(self.read_idx % self.buffer.buf_size, output, length=length)
+            self.buffer.get_into(self.read_idx % self.capacity, output, length=length)
             self.read_idx += length
             self.read_event.set()
             return True
@@ -100,7 +104,7 @@ class QueueBuffer(object):
             self.read_event.wait()
             self.read_event.clear()
 
-        output = self.buffer.get(self.read_idx % self.buffer.buf_size, length)
+        output = self.buffer.get(self.read_idx % self.capacity, length)
         self.read_idx += length
         self.read_event.set()
         return output
@@ -109,7 +113,7 @@ class QueueBuffer(object):
         if self.read_idx + length > self.write_idx:
             return None
         else:
-            output = self.buffer.get(self.read_idx % self.buffer.buf_size, length)
+            output = self.buffer.get(self.read_idx % self.capacity, length)
             self.read_idx += length
             self.read_event.set()
             return output
@@ -119,7 +123,7 @@ class QueueBuffer(object):
     #         length = np.shape(output)[0]
 
     #     # get no matter what
-    #     self.buffer.get_into(self.read_idx % self.buffer.buf_size, output, length=length)
+    #     self.buffer.get_into(self.read_idx % self.capacity, output, length=length)
     #     self.read_idx += length
 
     #     if self.read_idx > self.write_idx:  # let's force it -> bump up write idx
@@ -130,7 +134,7 @@ class QueueBuffer(object):
 
     # def get_force(self, length):
     #     # get no matter what
-    #     output = self.buffer.get(self.read_idx % self.buffer.buf_size, length)
+    #     output = self.buffer.get(self.read_idx % self.capacity, length)
     #     self.read_idx += length
 
     #     if self.read_idx > self.write_idx:  # let's force it -> bump up write idx
