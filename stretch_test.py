@@ -53,7 +53,7 @@ def main():
 
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
 
-    time_scale = 1.1
+    time_scale = 0.5
     stretcher.set_time_ratio(time_scale)
 
     input("Press enter to start loop playback")
