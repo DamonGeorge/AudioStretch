@@ -53,7 +53,7 @@ def main():
     # create the io buffers
     input_buffer = QueueBuffer((buf_size, 2))
 
-    loop_buffer = QueueBuffer((int(2 * block_size), 2))
+    loop_buffer = QueueBuffer((int(1.5 * block_size), 2))
     input_queue = Queue()
 
     # load the Audio Loop object
@@ -226,15 +226,10 @@ def main():
             # retrieve stretched audio in a loop until no more audio available
             stretched = stretcher.retrieve()
             while stretched.shape[0] > 0:
-                print(f"stretched = {stretched.shape[0]}")
-                print(f"loop output queue size = {loop_buffer.size()}")
                 processed_samples += np.shape(stretched)[0]
 
-                if np.shape(stretched)[0] > loop_buffer.capacity:
-                    raise RuntimeError("more stretched audio available then loop buffer's capacity!")
-
                 # wait to put new samples into loop output buffer
-                loop_buffer.put(stretched)
+                loop_buffer.put(stretched, put_incrementally=True)
 
                 # see if we have more to retrieve
                 stretched = stretcher.retrieve()
@@ -245,7 +240,7 @@ def main():
                 loop_output_stream.start()
                 print("loop output started")
 
-            print(f"Loop time: {time.perf_counter() - start}")
+            # print(f"Loop time: {time.perf_counter() - start}")
     except KeyboardInterrupt:
         pass
     except Exception as e:

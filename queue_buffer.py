@@ -32,18 +32,53 @@ class QueueBuffer(object):
     def full(self):
         return self.size() == self.capacity
 
-    def put(self, data: np.ndarray, length=None) -> int:
+    def put(self, data: np.ndarray, length=None, put_incrementally=False) -> int:
         if length is None:
             length = np.shape(data)[0]
 
-        self.read_event.clear()
-        while self.write_idx + length - self.read_idx > self.capacity:  # we must wait
-            self.read_event.wait()
+        if not put_incrementally:
             self.read_event.clear()
+            while self.write_idx + length - self.read_idx > self.capacity:  # we must wait
+                self.read_event.wait()
+                self.read_event.clear()
 
-        self.buffer.put(self.write_idx % self.capacity, data, length=length)
-        self.write_idx += length
-        self.write_event.set()
+            self.buffer.put(self.write_idx % self.capacity, data, length=length)
+            self.write_idx += length
+            self.write_event.set()
+        else:
+            self.read_event.clear()
+            if self.write_idx + length - self.read_idx <= self.capacity:  # we can put everything in
+                self.buffer.put(self.write_idx % self.capacity, data, length=length)
+                self.write_idx += length
+                self.write_event.set()
+            else:
+                remaining = length
+
+                while remaining > 0:
+                    # get available space
+                    avail = self.capacity - self.size()
+                    # clear event
+                    self.read_event.clear()
+                    # wait for space and loop again if necessary
+                    if avail == 0:
+                        self.read_event.wait()
+                        continue
+
+                    # don't add to much
+                    if avail > remaining:
+                        avail = remaining
+
+                    # fill the available space
+                    self.buffer.put(self.write_idx % self.capacity, data[-remaining:], length=avail)
+                    # update write_idx and write_event
+                    self.write_idx += avail
+                    self.write_event.set()
+                    # update remaining
+                    remaining -= avail
+                    # wait if necessary:
+                    if remaining > 0:
+                        self.read_event.wait()
+
         return True
 
     def put_nowait(self, data: np.ndarray, length=None):
