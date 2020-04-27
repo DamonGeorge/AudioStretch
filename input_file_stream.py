@@ -28,6 +28,7 @@ class InputFileStream(object):
 
         self.file = sf.SoundFile(filename)
         self.sample_rate = self.file.samplerate
+        self.channels = self.file.channels
 
         self.start_event = Event()
 
@@ -58,6 +59,8 @@ class InputFileStream(object):
 
             # process the audio
             block = self.file.read(frames=self.block_size, dtype='float32')
+            if block.ndim == 1:
+                block = np.expand_dims(block, axis=1)
             num_frames = np.shape(block)[0]
             self.blocks_received += num_frames
             self.callback(block, num_frames)
@@ -70,7 +73,7 @@ class InputFileStream(object):
             # sleep for remaining time at given sample rate
             sleep_time = time_per_loop - elapsed_compute - extra_time_slept
             # print(f"Sleep time: {sleep_time}")
-            time.sleep(sleep_time)
+            time.sleep(max(0, sleep_time))
 
             # signal first block done
             if self.blocks_received <= self.block_size and self.blocks_received > 0:

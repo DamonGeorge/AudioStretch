@@ -84,12 +84,13 @@ def main():
     elif isinstance(args.input, str):
         input_stream = InputFileStream(args.input, block_size=block_size, callback=input_callback)
         input_sample_rate = input_stream.sample_rate
+
     else:
         raise ValueError("Bad input argument")
     print(f"Input sample rate: {input_sample_rate}")
 
     # output stream for the input stream
-    output_stream = sd.OutputStream(samplerate=input_sample_rate, blocksize=block_size,
+    output_stream = sd.OutputStream(samplerate=input_sample_rate, blocksize=block_size, channels=input_stream.channels,
                                     device=args.output, callback=output_callback)
 
     # output stream for the stretched loop
@@ -100,7 +101,7 @@ def main():
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
 
     # the beat tracker object
-    btrack = BeatTracker(hop_size=512, frame_size=block_size)
+    btrack = BeatTracker(hop_size=block_size, frame_size=block_size)
     btrack.fix_tempo(loop.tempo)
     current_tempo = 120
     beat_event = Event()
@@ -156,48 +157,36 @@ def main():
         # flag for starting loop output after first iteration
         loop_output_started = False
 
+        # other counters
         samples_til_next_input_beat = np.inf
         samples_since_time_scale_calculated = 0
         beat_count = 3
 
+        # other flags
+        reset_time_scale = False
+
+        # WAIT TILL NEXT BEAT
+        current_beat_length = (input_sample_rate * 60 // current_tempo)
+        if samples_since_last_input_beat >= 0.3 * current_beat_length:
+            beat_event.clear()
+            while not beat_event.is_set():  # TODO: this could result in the loop starting slightly behind
+                print('sleep')
+                time.sleep(0.002)
+
         beat_event.clear()  # clear before we start our loop
         time_scale = loop.tempo / current_tempo  # initialize time scaling
-
-        reset_time_scale = False
 
         # the main processing loop
         while True:
             start = time.perf_counter()  # just for debugging
 
-            # if beat_occurred:  # we just had beat
-            #     beat_count += 1
-            #     if beat_count == 4:
-            #         beat_count = 0
-
-            #         samples_til_next_input_beat = input_sample_rate * 60 // current_tempo
-            #         samples_til_next_loop_beat = loop.get_samples_til_next_beat()
-            #         print(f"loop beat idx = {loop.beat_idx}")
-            #         print(f"samples till next input beat = {samples_til_next_input_beat}")
-            #         print(f"samples till next loop beat = {samples_til_next_loop_beat}")
-
-            #
-
-            #         samples_since_time_scale_calculated = 0
-            #         print(f"time scale = {time_scale}")
-
-            # elif samples_since_time_scale_calculated >= samples_til_next_input_beat:
-            #     time_scale = loop.tempo / current_tempo
-            #     print(f"resetting time_scale = {time_scale}")
-            #     samples_since_time_scale_calculated = 0
-
-            # for testing
             if beat_event.is_set():
                 beat_event.clear()
 
                 # count beats
                 beat_count = (beat_count + 1) % 2
 
-                if beat_count == 0:
+                if beat_count >= 0:
                     # samples until the next beat of input stream normalized to sample rate of the loop
                     samples_til_next_input_beat = (input_sample_rate * 60 // current_tempo -
                                                    samples_since_last_input_beat) * loop.sample_rate / input_sample_rate
@@ -211,6 +200,8 @@ def main():
                     print(f"samples till next loop beat = {samples_til_next_loop_beat}")
                     print(f"samples till next loop beat stretched = {samples_til_next_loop_beat * time_scale}")
 
+                    # ADJUSTMENTS
+                    samples_til_next_input_beat -= block_size * 2
                     # beat matching!!
 
                     # if loop is ahead, we must compress/speed up the loop -> time_scale < 1
