@@ -8,7 +8,7 @@ import numpy as np
 import soundfile as sf
 import librosa
 from pathlib import Path
-from loop import AudioLoop
+from utils.audio_loop import AudioLoop
 import sounddevice as sd
 
 

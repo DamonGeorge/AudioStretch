@@ -4,7 +4,7 @@ import soundfile as sf
 import numpy as np
 import time
 import librosa
-from circular_buffer import CircularBuffer
+from utils.circular_buffer import CircularBuffer
 import pickle
 from pathlib import Path
 # input

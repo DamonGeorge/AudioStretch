@@ -1,6 +1,6 @@
 import numpy as np
 from threading import Event
-from circular_buffer import CircularBuffer
+from utils.circular_buffer import CircularBuffer
 
 
 class QueueBuffer(object):
@@ -69,7 +69,8 @@ class QueueBuffer(object):
                         avail = remaining
 
                     # fill the available space
-                    self.buffer.put(self.write_idx % self.capacity, data[-remaining:], length=avail)
+                    self.buffer.put(self.write_idx % self.capacity,
+                                    data[-remaining:], length=avail)  # pylint: disable=invalid-unary-operand-type
                     # update write_idx and write_event
                     self.write_idx += avail
                     self.write_event.set()

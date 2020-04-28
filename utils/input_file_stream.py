@@ -13,10 +13,10 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import time
-import utils
+import utils.helpers as utils
 from typing import Callable, Optional
 from threading import Thread, Event
-from circular_buffer import CircularBuffer
+from utils.circular_buffer import CircularBuffer
 
 
 # TODO: handle wrapping of file

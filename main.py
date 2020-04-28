@@ -2,19 +2,17 @@ import argparse
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from output import Output
-from input import Input
-from loop import AudioLoop
+from utils.audio_loop import AudioLoop
 from lib.btrack import BeatTracker  # pylint: disable=import-error,no-name-in-module
 import librosa
 import pickle
 import time
-from circular_buffer import CircularBuffer
+from utils.circular_buffer import CircularBuffer
 from lib.rubberband import AudioStretcher  # pylint: disable=import-error,no-name-in-module
 from threading import Thread, Event
 from queue import Queue, Empty
-from queue_buffer import QueueBuffer
-from input_file_stream import InputFileStream
+from utils.queue_buffer import QueueBuffer
+from utils.input_file_stream import InputFileStream
 
 
 def parse_args():
