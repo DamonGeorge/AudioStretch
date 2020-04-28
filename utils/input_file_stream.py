@@ -59,9 +59,19 @@ class InputFileStream(object):
 
             # process the audio
             block = self.file.read(frames=self.block_size, dtype='float32')
+            num_frames = np.shape(block)[0]
+
+            # handle mono
             if block.ndim == 1:
                 block = np.expand_dims(block, axis=1)
-            num_frames = np.shape(block)[0]
+
+            # handle end of file
+            if num_frames < self.block_size:
+                new_block = np.zeros((self.block_size, block.shape[1]), dtype=np.float32)
+                new_block[:num_frames] = block
+                block = new_block
+                self.file.seek(0)
+
             self.blocks_received += num_frames
             self.callback(block, num_frames)
 

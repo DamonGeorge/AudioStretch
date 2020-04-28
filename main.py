@@ -13,6 +13,7 @@ from threading import Thread, Event
 from queue import Queue, Empty
 from utils.queue_buffer import QueueBuffer
 from utils.input_file_stream import InputFileStream
+from aubio import tempo as Tempo  # pylint: disable=no-name-in-module
 
 
 def parse_args():
@@ -45,22 +46,15 @@ def main():
     # block size
     block_size = args.block_size
     hop_size = block_size // 2
-
-    buf_size = block_size*10
+    input_sample_rate = 44100
 
     # load the Audio Loop object
     loop = AudioLoop.from_file(args.loop)
 
     # create the io buffers
-    input_buffer = QueueBuffer((buf_size, 2))
-
-    loop_buffer = QueueBuffer((int(1.5 * block_size), loop.channels))
+    input_buffer = QueueBuffer((4*block_size, 2))
+    loop_buffer = QueueBuffer((int(1 * block_size), loop.channels))
     input_queue = Queue()
-
-    # extras # TODO: these used still?
-    loop_idx = 0
-    processed_samples = 0
-    input_sample_rate = 44100
 
     # Stream callbacks
     def input_callback(indata, frames, *args, **kwargs):
@@ -82,7 +76,6 @@ def main():
     elif isinstance(args.input, str):
         input_stream = InputFileStream(args.input, block_size=block_size, callback=input_callback)
         input_sample_rate = input_stream.sample_rate
-
     else:
         raise ValueError("Bad input argument")
     print(f"Input sample rate: {input_sample_rate}")
@@ -99,16 +92,19 @@ def main():
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
 
     # the beat tracker object
-    btrack = BeatTracker(hop_size=block_size, frame_size=block_size)
+    btrack = BeatTracker(hop_size=hop_size, frame_size=block_size)
     btrack.fix_tempo(loop.tempo)
     current_tempo = 120
     beat_event = Event()
     samples_since_last_input_beat = 0
     btrack_thread_alive = True
 
+    # the aubio object
+    aubio_tracker = Tempo(buf_size=block_size, hop_size=hop_size, samplerate=input_sample_rate)
+
     # the btrack thread
     def btrack_thread():
-        nonlocal btrack, beat_event, samples_since_last_input_beat, btrack_thread_alive, current_tempo
+        nonlocal btrack, beat_event, samples_since_last_input_beat, btrack_thread_alive, current_tempo, hop_size
 
         while btrack_thread_alive:
             try:
@@ -127,13 +123,30 @@ def main():
             # process the audio with btrack
             btrack.process_audio(block)
 
+            # process audio with aubio
+            num_hops = block.shape[0] // hop_size
+            for i in range(num_hops):
+                aubio_tracker(block[i*hop_size:(i+1)*hop_size])
+
             if btrack.beat_due_in_current_frame():
                 print("Beat")
                 beat_event.set()
                 # TODO: should this be set to size of current block or 0??
                 samples_since_last_input_beat = np.shape(block)[0]
-                # update tempo
-                tempo = btrack.get_current_tempo_estimate() * (input_sample_rate / 44100)
+                # get tempos from our two trackers
+                btrack_tempo = btrack.get_current_tempo_estimate() * (input_sample_rate / 44100)
+                aubio_tempo = aubio_tracker.get_bpm()
+                # average the tempos if aubio confidence high
+                if aubio_tracker.get_confidence() > 0.0:
+                    # adjust aubio tempo to be in same range as btrack
+                    if aubio_tempo > 1.5 * btrack_tempo:
+                        aubio_tempo /= 2
+                    elif aubio_tempo < 0.5 * btrack_tempo:
+                        aubio_tempo *= 2
+                    tempo = (aubio_tempo + btrack_tempo) / 2
+                else:
+                    tempo = btrack_tempo
+
                 if abs(tempo - current_tempo) > 0.1:
                     current_tempo = tempo
                     print(f"Current tempo: {current_tempo}")
@@ -199,7 +212,7 @@ def main():
                     print(f"samples till next loop beat stretched = {samples_til_next_loop_beat * time_scale}")
 
                     # ADJUSTMENTS
-                    samples_til_next_input_beat -= block_size * 2
+                    samples_til_next_input_beat -= block_size*2
                     # beat matching!!
 
                     # if loop is ahead, we must compress/speed up the loop -> time_scale < 1
@@ -251,8 +264,6 @@ def main():
             # retrieve stretched audio in a loop until no more audio available
             stretched = stretcher.retrieve()
             while stretched.shape[0] > 0:
-                processed_samples += np.shape(stretched)[0]
-
                 # wait to put new samples into loop output buffer
                 loop_buffer.put(stretched, put_incrementally=True)
 

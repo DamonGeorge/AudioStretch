@@ -67,12 +67,14 @@ def main():
         for i in range(num_hops):
             bt = beat_tracker(block[i*hop_size:(i+1)*hop_size])
             is_beat = is_beat or bt
-        new_tempo = beat_tracker.get_bpm()
-        if new_tempo != current_tempo:
-            current_tempo = new_tempo
-            print(f"Tempo: {current_tempo}")
+
         if is_beat:
             print("Beat")
+            new_tempo = beat_tracker.get_bpm()
+            if new_tempo != current_tempo:
+                current_tempo = new_tempo
+            print(f"Tempo: {current_tempo}")
+            print(f"confidence: {beat_tracker.get_confidence()}")
 
     def input_callback(indata, frames, *args, **kwargs):
         btrack_callback(indata, frames)
