@@ -45,7 +45,7 @@ def main():
     args = parse_args()
     # block size
     block_size = args.block_size
-    hop_size = block_size // 2
+    hop_size = block_size
     input_sample_rate = 44100
 
     # load the Audio Loop object
@@ -72,7 +72,7 @@ def main():
     # select either input stream or file
     if args.input is None or isinstance(args.input, int):
         input_stream = sd.InputStream(samplerate=input_sample_rate, blocksize=block_size,
-                                      device=args.input, dtype="float32", callback=input_callback)
+                                      latency='low', device=args.input, dtype="float32", callback=input_callback)
     elif isinstance(args.input, str):
         input_stream = InputFileStream(args.input, block_size=block_size, callback=input_callback)
         input_sample_rate = input_stream.sample_rate
@@ -82,11 +82,11 @@ def main():
 
     # output stream for the input stream
     output_stream = sd.OutputStream(samplerate=input_sample_rate, blocksize=block_size, channels=input_stream.channels,
-                                    device=args.output, callback=output_callback)
+                                    latency='low', device=args.output, callback=output_callback)
 
     # output stream for the stretched loop
-    loop_output_stream = sd.OutputStream(samplerate=loop.sample_rate, blocksize=block_size,
-                                         device=args.output, channels=loop.channels, callback=loop_output_callback)
+    loop_output_stream = sd.OutputStream(samplerate=loop.sample_rate, blocksize=block_size, channels=loop.channels,
+                                         latency='low', device=args.output, callback=loop_output_callback)
 
     # the time stretcher object
     stretcher = AudioStretcher(sample_rate=loop.sample_rate, channels=loop.channels, realtime=True)
@@ -141,7 +141,7 @@ def main():
                     # adjust aubio tempo to be in same range as btrack
                     if aubio_tempo > 1.5 * btrack_tempo:
                         aubio_tempo /= 2
-                    elif aubio_tempo < 0.5 * btrack_tempo:
+                    elif aubio_tempo < 0.75 * btrack_tempo:
                         aubio_tempo *= 2
                     tempo = (aubio_tempo + btrack_tempo) / 2
                 else:
@@ -211,8 +211,10 @@ def main():
                     print(f"samples till next loop beat = {samples_til_next_loop_beat}")
                     print(f"samples till next loop beat stretched = {samples_til_next_loop_beat * time_scale}")
 
-                    # ADJUSTMENTS
-                    samples_til_next_input_beat -= block_size*2
+                    # ADJUSTMEN
+                    # TS
+                    # samples_til_next_input_beat -= block_size*2
+                    samples_til_next_input_beat -= (input_stream.latency + output_stream.latency) * loop.sample_rate
                     # beat matching!!
 
                     # if loop is ahead, we must compress/speed up the loop -> time_scale < 1
@@ -226,18 +228,14 @@ def main():
                     elif samples_til_next_loop_beat > 0.5 * samples_til_next_input_beat:  # \
                             # and (samples_til_next_input_beat - samples_til_next_loop_beat) >= block_size:
                         print("Second scale IF")
-                        ratio = samples_til_next_input_beat / samples_til_next_loop_beat
-                        print(f"ratio = {ratio}")
-                        time_scale = ratio
+                        time_scale = samples_til_next_input_beat / samples_til_next_loop_beat
 
                     # else if loop if slightly ahead, we need to compress/speed up the loop
                     elif samples_til_next_loop_beat < 0.5 * samples_til_next_input_beat:  # \
                             # and samples_til_next_loop_beat >= block_size:
                         print("Third scale IF")
-                        ratio = samples_til_next_input_beat / \
+                        time_scale = samples_til_next_input_beat / \
                             (samples_til_next_loop_beat + (loop.get_sample_length_of_next_beat() / time_scale))
-                        print(f"ratio = {ratio}")
-                        time_scale = ratio
                     else:
                         # calc the time scale using tempos
                         time_scale = loop.tempo / current_tempo
@@ -261,6 +259,8 @@ def main():
             # increment counter
             samples_since_time_scale_calculated += block_size
 
+            # print(f"stretch time: {time.perf_counter() - start}")
+
             # retrieve stretched audio in a loop until no more audio available
             stretched = stretcher.retrieve()
             while stretched.shape[0] > 0:
@@ -276,7 +276,6 @@ def main():
                 loop_output_stream.start()
                 print("loop output started")
 
-            # print(f"Loop time: {time.perf_counter() - start}")
     except KeyboardInterrupt:
         pass
     except Exception as e:

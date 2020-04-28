@@ -53,14 +53,14 @@ def main():
 
     # select either input stream or file
     if args.input is None or isinstance(args.input, int):
-        input = sd.InputStream(samplerate=sample_rate, blocksize=block_size,
+        input = sd.InputStream(samplerate=sample_rate, blocksize=block_size, latency='low',
                                device=args.input, dtype="float32", callback=input_callback)
     elif isinstance(args.input, str):
         input = InputFileStream(args.input, block_size=block_size, callback=input_callback)
         sample_rate = input.sample_rate  # default sample rate
     print(f"Sample rate: {sample_rate}")
 
-    output = sd.OutputStream(blocksize=block_size, samplerate=sample_rate,
+    output = sd.OutputStream(blocksize=block_size, samplerate=sample_rate, latency='low',
                              device=output_device, callback=output_callback)
     try:
         print(f"Input Starting: {time.perf_counter()}")
@@ -70,6 +70,8 @@ def main():
 
         while True:
             time.sleep(1)
+            print(f"input latency: {input.latency}")
+            print(f"output latency: {output.latency}")
 
     except KeyboardInterrupt:
         print('\nInterrupted by user')

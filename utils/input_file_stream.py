@@ -29,6 +29,7 @@ class InputFileStream(object):
         self.file = sf.SoundFile(filename)
         self.sample_rate = self.file.samplerate
         self.channels = self.file.channels
+        self.latency = self.block_size / self.sample_rate
 
         self.start_event = Event()
 
