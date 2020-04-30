@@ -48,6 +48,9 @@ def main():
     hop_size = block_size
     input_sample_rate = 44100
 
+    # gain on input
+    input_gain = 0.5
+
     # load the Audio Loop object
     loop = AudioLoop.from_file(args.loop)
 
@@ -58,7 +61,7 @@ def main():
 
     # Stream callbacks
     def input_callback(indata, frames, *args, **kwargs):
-        input_buffer.put(indata, frames)
+        input_buffer.put(indata * input_gain, frames)
         input_queue.put_nowait(indata)  # TODO: need to copy??
 
     def output_callback(outdata, frames, *args, **kwargs):
